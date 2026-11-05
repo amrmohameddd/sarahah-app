@@ -3,6 +3,13 @@ import mongoose from "mongoose";
 
 const messageSchema = new mongoose.Schema(
   {
+    sender: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: [true, "Sender is required"],
+      select: false,
+    },
+
     recipient: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
@@ -20,6 +27,12 @@ const messageSchema = new mongoose.Schema(
     isRead: {
       type: Boolean,
       default: false,
+    },
+
+    senderIdentityRevealed: {
+      type: Boolean,
+      default: false,
+      select: false,
     },
   },
   { timestamps: true }

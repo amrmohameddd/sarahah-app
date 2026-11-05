@@ -1,19 +1,35 @@
 
 import Message from "../../DB/models/message.model.js";
 import User from "../../DB/models/usr.model.js";
+import IdentityRequest from "../../DB/models/identityRequest.model.js";
 
-// Send a new message
-export const createMessage = async ({ recipient, content }) => {
-  const user = await User.findById(recipient);
+// Send a new anonymous message
+export const createMessage = async ({ sender, recipient, content }) => {
+  const senderUser = await User.findById(sender);
 
-  if (!user) {
+  if (!senderUser) {
+    const error = new Error("Sender not found");
+    error.statusCode = 404;
+    throw error;
+  }
+
+  const recipientUser = await User.findById(recipient);
+
+  if (!recipientUser) {
     const error = new Error("Recipient not found");
     error.statusCode = 404;
     throw error;
   }
 
+  if (senderUser._id.equals(recipientUser._id)) {
+    const error = new Error("You cannot send a message to yourself");
+    error.statusCode = 400;
+    throw error;
+  }
+
   const message = await Message.create({
-    recipient: user._id,
+    sender: senderUser._id,
+    recipient: recipientUser._id,
     content: content.trim(),
   });
 
@@ -22,9 +38,38 @@ export const createMessage = async ({ recipient, content }) => {
 
 // Get all messages received by a user
 export const getMyMessages = async (userId) => {
-  return await Message.find({
+  const messages = await Message.find({
     recipient: userId,
-  }).sort({ createdAt: -1 });
+  })
+    .select("+sender")
+    .sort({ createdAt: -1 });
+
+  const messageIds = messages.map((message) => message._id);
+
+  // Find only identity requests accepted by the original sender
+  const acceptedRequests = await IdentityRequest.find({
+    message: { $in: messageIds },
+    requester: userId,
+    status: "accepted",
+  }).select("message");
+
+  const revealedMessageIds = new Set(
+    acceptedRequests.map((request) => request.message.toString())
+  );
+
+  return messages.map((message) => {
+    const messageData = message.toObject();
+
+    const isIdentityRevealed = revealedMessageIds.has(
+      message._id.toString()
+    );
+
+    if (!isIdentityRevealed) {
+      delete messageData.sender;
+    }
+
+    return messageData;
+  });
 };
 
 // Mark a message as read
